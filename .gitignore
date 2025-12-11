@@ -1,0 +1,10 @@
+# .gitignore
+
+# Python virtual environments
+venv/
+
+# Node.js dependencies
+**/node_modules/
+
+# All directories named 'old'
+**/old/
