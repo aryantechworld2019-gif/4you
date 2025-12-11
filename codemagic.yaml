@@ -1,31 +1,85 @@
 workflows:
-
-  build-apps:
-
-    name: Build iOS and Android
-
-    working_directory: ios
+  react-native-ios:
+    name: React Native iOS build
+    max_build_duration: 120
+    environment:
+      node: 18
+      yarn: true
+      cocoapods: default
+      xcode: latest
+      vars:
+        # ==== EDIT THESE BEFORE BUILDING ====
+        APP_BUNDLE_ID: com.example.yourapp    # <- replace with your iOS bundle id
+        APP_NAME: "YourApp"                  # <- replace with your app's display name
+        XCODE_SCHEME: YourApp                # <- replace with your Xcode scheme (usually app name)
+        XCODE_PROJECT: ios/YourApp.xcworkspace # <- workspace or .xcodeproj path
+      flutter: none
 
     scripts:
+      - name: Install JS dependencies
+        script: |
+          # Use npm or yarn depending on your repo
+          if [ -f yarn.lock ]; then
+            yarn install --frozen-lockfile
+          else
+            npm ci
+          fi
 
-      - name: Prepare
+      - name: Install CocoaPods (iOS native deps)
+        script: |
+          cd ios || exit 1
+          pod install --repo-update || true
+          cd ..
 
-        script: pwd # current working directory is /Users/builder/clone/mobile
+      - name: Bundle JS for iOS (React Native)
+        script: |
+          # adjust entry-file if different (index.js or index.ios.js)
+          npx react-native bundle --platform ios --dev false --entry-file index.js \
+            --bundle-output ios/main.jsbundle --assets-dest ios
 
-      - name: Build iOS
+      - name: Create archive and export IPA
+        script: |
+          set -o pipefail
+          mkdir -p $CM_BUILD_DIR/ios_archive
+          cd ios || exit 1
 
-        working_directory: mobile/ios
+          # Archive
+          xcodebuild -workspace "${XCODE_PROJECT##*/}" -scheme "$XCODE_SCHEME" \
+            -configuration Release -sdk iphoneos \
+            -archivePath "$CM_BUILD_DIR/ios_archive/$XCODE_SCHEME.xcarchive" archive | xcpretty || true
 
-        script: pwd # current working directory is /Users/builder/clone/mobile/ios
+          # Export (uses ExportOptions.plist - see below)
+          if [ ! -f ExportOptions.plist ]; then
+            echo "ExportOptions.plist not found in ios/. Using App Store export defaults."
+            cat > ExportOptions.plist <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key>
+  <string>app-store</string>
+  <key>signingStyle</key>
+  <string>automatic</string>
+</dict>
+</plist>
+EOF
+          fi
 
-      - name: Build Android
+          xcodebuild -exportArchive \
+            -archivePath "$CM_BUILD_DIR/ios_archive/$XCODE_SCHEME.xcarchive" \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath "$CM_BUILD_DIR/build/ios/ipa" | xcpretty || true
 
-        working_directory: mobile/android
+          cd ..
 
-        script: pwd # current working directory is /Users/builder/clone/mobile/android
+    artifacts:
+      - build/ios/ipa/*.ipa
 
-      - name: Process Logs
-
-        working_directory: /Users/builder/Library/Logs
-
-        script: pwd # current working directory is /Users/builder/Library/Logs
+    publishing:
+      - provider: app-store
+        app_store_connect:
+          api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+          key_id: $APP_STORE_CONNECT_KEY_ID
+          issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        options:
+          submit_for_review: false
