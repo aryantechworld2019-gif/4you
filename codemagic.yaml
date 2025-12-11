@@ -1,37 +1,21 @@
 workflows:
-  react-native-ios:
-    name: React Native iOS build
-    max_build_duration: 120
+  ios-workflow:
+    name: iOS Workflow
     environment:
-      node: 18
-      yarn: true
-      cocoapods: default
+      flutter: stable
       xcode: latest
       vars:
-        APP_BUNDLE_ID: com.example.yourapp
-        APP_NAME: "YourApp"
-        XCODE_SCHEME: YourApp
-        XCODE_PROJECT: ios/YourApp.xcworkspace
-      flutter: none
-
+        APP_BUNDLE_ID: com.yourcompany.myfirstiosapp
+        BUILD_NUMBER: 1
     scripts:
-      - name: Install JS dependencies
+      - name: Install dependencies
         script: |
-          if [ -f yarn.lock ]; then
-            yarn install --frozen-lockfile
-          else
-            npm ci
-          fi
-
-      - name: Install CocoaPods (iOS native deps)
+          flutter pub get
+      - name: Build iOS app
         script: |
-          cd ios || exit 1
-          pod install --repo-update || true
-          cd ..
-
-      - name: Bundle JS for iOS (React Native)
-        script: |
-          npx react-native bundle --platform ios --dev false --entry-file index.js \
-            --bundle-output ios/main.jsbundle --assets-dest ios
-
-     
+          flutter build ios --release --no-codesign --build-name=1.0.0 --build-number=$BUILD_NUMBER
+    artifacts:
+      - build/ios/iphoneos/Runner.app
+      - build/ios/ipa/*.ipa
+    publishing:
+      - email
