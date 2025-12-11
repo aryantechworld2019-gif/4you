@@ -4,7 +4,7 @@ workflows:
 
     name: Build iOS and Android
 
-    working_directory: mobile
+    working_directory: ios
 
     scripts:
 
