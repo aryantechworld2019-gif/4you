@@ -1,0 +1,31 @@
+workflows:
+
+  build-apps:
+
+    name: Build iOS and Android
+
+    working_directory: mobile
+
+    scripts:
+
+      - name: Prepare
+
+        script: pwd # current working directory is /Users/builder/clone/mobile
+
+      - name: Build iOS
+
+        working_directory: mobile/ios
+
+        script: pwd # current working directory is /Users/builder/clone/mobile/ios
+
+      - name: Build Android
+
+        working_directory: mobile/android
+
+        script: pwd # current working directory is /Users/builder/clone/mobile/android
+
+      - name: Process Logs
+
+        working_directory: /Users/builder/Library/Logs
+
+        script: pwd # current working directory is /Users/builder/Library/Logs
