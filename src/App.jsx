@@ -266,14 +266,27 @@ const EngineerDashboard = ({ showNotification, onNewCustomerAdded }) => {
   const [address, setAddress] = useState('');
   const [plan, setPlan] = useState('100 Mbps Standard');
   const [newPassword, setNewPassword] = useState('');
+  const [userPhoto, setUserPhoto] = useState(null);
+  const [kycDoc, setKycDoc] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  const handleFileChange = (e, setFile) => {
+    const file = e.target.files[0];
+    if (file && file.size > 2097152) { // 2MB limit
+      showNotification("File size too big, yaar! Max 2MB allowed.", 'error');
+      e.target.value = null;
+      setFile(null);
+      return;
+    }
+    setFile(file);
+  };
 
   const handleAddUser = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-    if (!name || !mobile || !address || !plan || !newPassword) {
-      showNotification("Please fill all details!", 'error');
+    if (!name || !mobile || !address || !plan || !newPassword || !userPhoto || !kycDoc) {
+      showNotification("Please fill all details and upload KYC documents!", 'error');
       setLoading(false);
       return;
     }
@@ -304,6 +317,11 @@ const EngineerDashboard = ({ showNotification, onNewCustomerAdded }) => {
       setAddress('');
       setPlan('100 Mbps Standard');
       setNewPassword('');
+      setUserPhoto(null);
+      setKycDoc(null);
+      // Reset file inputs
+      document.getElementById('userPhoto').value = null;
+      document.getElementById('kycDoc').value = null;
     } catch (error) {
       showNotification(error.message || 'Failed to add customer', 'error');
     } finally {
@@ -312,6 +330,32 @@ const EngineerDashboard = ({ showNotification, onNewCustomerAdded }) => {
   };
 
   const plans = ["100 Mbps Standard", "300 Mbps Fiber Blast", "500 Mbps Pro Gamer", "1 Gbps Premium"];
+
+  const FileUploadArea = ({ icon: Icon, title, file, id, setFile }) => (
+    <div className="bg-white p-4 rounded-xl shadow-inner border border-gray-200">
+      <label htmlFor={id} className="cursor-pointer">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Icon className="w-6 h-6 text-orange-500" />
+            <div>
+              <p className="font-semibold text-gray-800">{title}</p>
+              <p className="text-xs text-gray-500">{file ? file.name : 'Click to upload (Max 2MB)'}</p>
+            </div>
+          </div>
+          <button type="button" className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${file ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+            {file ? 'Uploaded' : 'Select File'}
+          </button>
+        </div>
+      </label>
+      <input
+        type="file"
+        id={id}
+        hidden
+        accept="image/*, .pdf"
+        onChange={(e) => handleFileChange(e, setFile)}
+      />
+    </div>
+  );
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -353,6 +397,27 @@ const EngineerDashboard = ({ showNotification, onNewCustomerAdded }) => {
             <label className="block text-sm font-medium text-gray-700 mb-1">Temporary Password</label>
             <input type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none" placeholder="Set temporary login password" />
           </div>
+        </div>
+
+        <h3 className="font-semibold text-lg text-gray-700 border-b pt-4 pb-2 mb-4">KYC & Documents</h3>
+
+        {/* File Uploads */}
+        <div className="space-y-4">
+          <FileUploadArea
+            icon={Camera}
+            title="User Photo (Passport Size)"
+            file={userPhoto}
+            id="userPhoto"
+            setFile={setUserPhoto}
+          />
+          <FileUploadArea
+            icon={FileTextIcon}
+            title="Aadhaar/KYC Document (Front and Back)"
+            file={kycDoc}
+            id="kycDoc"
+            setFile={setKycDoc}
+          />
+          <p className="text-xs text-gray-500 pt-2">Note: Files will be securely stored. Max 2MB per file.</p>
         </div>
 
         <button
