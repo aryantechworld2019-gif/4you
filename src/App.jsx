@@ -113,11 +113,50 @@ class APIService {
     return this.request('/tasks');
   }
 
-  async createTask(taskData) {
-    return this.request('/tasks', {
-      method: 'POST',
-      body: JSON.stringify(taskData),
-    });
+  async createTask(taskData, userPhoto, kycDoc) {
+    const formData = new FormData();
+    formData.append('name', taskData.name);
+    formData.append('mobile', taskData.mobile);
+    formData.append('address', taskData.address);
+    formData.append('plan', taskData.plan);
+    formData.append('initial_password', taskData.initial_password);
+    formData.append('status', taskData.status);
+
+    if (userPhoto) {
+      formData.append('user_photo', userPhoto);
+    }
+    if (kycDoc) {
+      formData.append('kyc_document', kycDoc);
+    }
+
+    // For FormData, we need to modify the request
+    const headers = {};
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/tasks`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+
+      if (response.status === 401) {
+        this.clearToken();
+        throw new Error('Session expired. Please login again.');
+      }
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || 'Something went wrong');
+      }
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
   }
 
   async updateTaskStatus(taskId, status) {
@@ -307,9 +346,9 @@ const EngineerDashboard = ({ showNotification, onNewCustomerAdded }) => {
         status: 'Pending Installation'
       };
 
-      const newTask = await api.createTask(taskData);
+      const newTask = await api.createTask(taskData, userPhoto, kycDoc);
       onNewCustomerAdded(newTask);
-      showNotification(`User ${name} added successfully! Installation is scheduled.`, 'success');
+      showNotification(`User ${name} added successfully with KYC documents! Installation is scheduled.`, 'success');
 
       // Reset Form
       setName('');

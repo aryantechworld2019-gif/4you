@@ -21,6 +21,8 @@ class TaskUpdate(BaseModel):
 
 class TaskResponse(TaskBase):
     id: str
+    user_photo_path: Optional[str] = None
+    kyc_document_path: Optional[str] = None
     created_at: datetime
 
     class Config:

@@ -13,7 +13,7 @@ class TaskService:
         """Get tasks collection from database"""
         return get_database()["tasks"]
 
-    def create_task(self, task_data: TaskCreate) -> dict:
+    def create_task(self, task_data: TaskCreate, user_photo_path: str = None, kyc_document_path: str = None) -> dict:
         """Create a new installation task and register the user"""
         # Create the customer user account
         user_data = UserCreate(
@@ -37,6 +37,8 @@ class TaskService:
             "address": task_data.address,
             "plan": task_data.plan,
             "status": task_data.status,
+            "user_photo_path": user_photo_path,
+            "kyc_document_path": kyc_document_path,
             "created_at": datetime.utcnow()
         }
 
