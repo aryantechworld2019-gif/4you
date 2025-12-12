@@ -8,8 +8,10 @@ from app.services.user_service import user_service
 
 
 class TaskService:
-    def __init__(self):
-        self.collection = get_database()["tasks"]
+    @property
+    def collection(self):
+        """Get tasks collection from database"""
+        return get_database()["tasks"]
 
     def create_task(self, task_data: TaskCreate) -> dict:
         """Create a new installation task and register the user"""

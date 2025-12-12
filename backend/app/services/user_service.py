@@ -7,8 +7,10 @@ from app.schemas.user import UserCreate
 
 
 class UserService:
-    def __init__(self):
-        self.collection = get_database()["users"]
+    @property
+    def collection(self):
+        """Get users collection from database"""
+        return get_database()["users"]
 
     def create_user(self, user_data: UserCreate) -> dict:
         """Create a new user"""

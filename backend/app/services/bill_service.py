@@ -6,8 +6,10 @@ from app.schemas.bill import BillCreate
 
 
 class BillService:
-    def __init__(self):
-        self.collection = get_database()["bills"]
+    @property
+    def collection(self):
+        """Get bills collection from database"""
+        return get_database()["bills"]
 
     def create_bill(self, bill_data: BillCreate) -> dict:
         """Create a new bill"""
