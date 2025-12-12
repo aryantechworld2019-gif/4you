@@ -22,78 +22,142 @@ import {
   MapPin,
 } from 'lucide-react';
 
-// --- MOCK DATA & UTILS ---
+// --- API CONFIGURATION ---
+const API_BASE_URL = 'http://localhost:8000/api';
 
-const MOCK_USER = {
-  name: "Rahul Sharma",
-  email: "rahul.sharma@4you.in",
-  plan: "Unlimited Fiber Blast (300Mbps)",
-  address: "Flat 402, Krishna Residency, Indiranagar, Bengaluru"
-};
+// --- API SERVICE ---
+class APIService {
+  constructor() {
+    this.token = localStorage.getItem('token');
+  }
 
-const INITIAL_BILLS = [
-  { id: 101, month: "October 2023", amount: 1179.00, dueDate: "2023-11-05", status: "Overdue", pdf: "bill_oct.pdf" },
-  { id: 102, month: "September 2023", amount: 1179.00, dueDate: "2023-10-05", status: "Paid", pdf: "bill_sep.pdf" },
-  { id: 103, month: "August 2023", amount: 1179.00, dueDate: "2023-09-05", status: "Paid", pdf: "bill_aug.pdf" },
-  { id: 104, month: "July 2023", amount: 1179.00, dueDate: "2023-08-05", status: "Paid", pdf: "bill_jul.pdf" },
-];
+  setToken(token) {
+    this.token = token;
+    localStorage.setItem('token', token);
+  }
 
-const INITIAL_ENGINEER_TASKS = [
-    {
-        id: crypto.randomUUID(),
-        name: "Priya Menon",
-        mobile: "9900112233",
-        address: "E-301, Prestige Towers, Whitefield",
-        plan: "1 Gbps Premium",
-        status: 'Pending Installation',
-        createdByEngineer: 'engineer-demo-1',
-        createdAt: new Date(Date.now() - 86400000).toISOString() // 1 day ago
-    },
-    {
-        id: crypto.randomUUID(),
-        name: "Vikram Singh",
-        mobile: "9876543210",
-        address: "House 12, Sector 7, HSR Layout",
-        plan: "300 Mbps Fiber Blast",
-        status: 'Installation Scheduled',
-        createdByEngineer: 'engineer-demo-2',
-        createdAt: new Date(Date.now() - 43200000).toISOString() // 12 hours ago
-    },
-    {
-        id: crypto.randomUUID(),
-        name: "Anjali Rao",
-        mobile: "9000055555",
-        address: "Apartment 10A, Shanti Nagar, MG Road",
-        plan: "100 Mbps Standard",
-        status: 'Completed',
-        createdByEngineer: 'engineer-demo-1',
-        createdAt: new Date(Date.now() - 172800000).toISOString() // 2 days ago
+  clearToken() {
+    this.token = null;
+    localStorage.removeItem('token');
+  }
+
+  async request(endpoint, options = {}) {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
     }
-];
 
+    const config = {
+      ...options,
+      headers,
+    };
+
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+
+      if (response.status === 401) {
+        this.clearToken();
+        throw new Error('Session expired. Please login again.');
+      }
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || 'Something went wrong');
+      }
+
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Auth endpoints
+  async login(mobile, password, role) {
+    const data = await this.request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ mobile, password, role }),
+    });
+    this.setToken(data.access_token);
+    return data;
+  }
+
+  async register(userData) {
+    return this.request('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    });
+  }
+
+  async getCurrentUser() {
+    return this.request('/auth/me');
+  }
+
+  // Bill endpoints
+  async getBills() {
+    return this.request('/bills');
+  }
+
+  async payBill(billId) {
+    return this.request(`/bills/${billId}/pay`, {
+      method: 'PATCH',
+    });
+  }
+
+  // Task endpoints
+  async getTasks() {
+    return this.request('/tasks');
+  }
+
+  async createTask(taskData) {
+    return this.request('/tasks', {
+      method: 'POST',
+      body: JSON.stringify(taskData),
+    });
+  }
+
+  async updateTaskStatus(taskId, status) {
+    return this.request(`/tasks/${taskId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  }
+}
+
+const api = new APIService();
+
+// --- UTILS ---
 const LOADING_MESSAGES = [
   "Waiting for the OTP SMS...",
   "Calculating 18% GST...",
   "Connecting to the bank server (it's lunch time)...",
   "Looking for cashback offers...",
   "Asking the neighbors to get off your WiFi...",
-  "Verifying with Aadhaar..." 
+  "Verifying with Aadhaar..."
 ];
 
-const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
+const formatCurrency = (amount) => new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  maximumFractionDigits: 0
+}).format(amount);
 
 
 // --- COMPONENTS ---
 
 // 1. Login Component
-const Login = ({ onLogin, setUserRole }) => {
+const Login = ({ onLogin, setUserRole, setUserData }) => {
   const [mobileNumber, setMobileNumber] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [role, setRole] = useState('customer'); // 'customer' or 'engineer'
+  const [role, setRole] = useState('customer');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -104,27 +168,16 @@ const Login = ({ onLogin, setUserRole }) => {
       return;
     }
 
-    // Simulate API delay
-    setTimeout(() => {
-      let success = false;
-      if (role === 'customer' && password === 'password') {
-        success = true;
-      } else if (role === 'engineer' && mobileNumber === '8888888888' && password === 'engineer') {
-        success = true;
-      }
-
-      if (success) {
-        setUserRole(role);
-        onLogin();
-      } else {
-        if (role === 'customer') {
-          setError("Wrong password, bhai. Just type 'password'.");
-        } else {
-          setError("Engineer credentials invalid. Check mobile (8888888888) and password (engineer).");
-        }
-        setLoading(false);
-      }
-    }, 1500);
+    try {
+      const response = await api.login(mobileNumber, password, role);
+      setUserRole(role);
+      setUserData(response.user);
+      onLogin();
+    } catch (err) {
+      setError(err.message || "Login failed. Please check your credentials.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -213,106 +266,52 @@ const EngineerDashboard = ({ showNotification, onNewCustomerAdded }) => {
   const [address, setAddress] = useState('');
   const [plan, setPlan] = useState('100 Mbps Standard');
   const [newPassword, setNewPassword] = useState('');
-  const [userPhoto, setUserPhoto] = useState(null);
-  const [kycDoc, setKycDoc] = useState(null);
   const [loading, setLoading] = useState(false);
-  
-  const handleFileChange = (e, setFile) => {
-    const file = e.target.files[0];
-    if (file && file.size > 2097152) { // 2MB limit
-      showNotification("File size too big, yaar! Max 2MB allowed.", 'error');
-      e.target.value = null;
-      setFile(null);
-      return;
-    }
-    setFile(file);
-  };
 
-  const handleAddUser = (e) => {
+  const handleAddUser = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-    if (!name || !mobile || !address || !plan || !newPassword || !userPhoto || !kycDoc) {
-      showNotification("Please fill all details and upload files. KYC is mandatory!", 'error');
+    if (!name || !mobile || !address || !plan || !newPassword) {
+      showNotification("Please fill all details!", 'error');
       setLoading(false);
       return;
     }
-    
-    // Simple 10-digit mobile number validation
+
     if (mobile.length !== 10 || isNaN(mobile)) {
       showNotification("Mobile number must be 10 digits.", 'error');
       setLoading(false);
       return;
     }
 
-    // Simulate API delay
-    setTimeout(() => {
-        try {
-            const newCustomer = {
-                id: crypto.randomUUID(), // Local unique ID
-                name: name,
-                mobile: mobile,
-                address: address,
-                plan: plan,
-                initialPassword: newPassword,
-                photoFileName: userPhoto.name,
-                documentFileName: kycDoc.name,
-                status: 'Pending Installation', // Initial status
-                createdByEngineer: 'engineer-demo-user', // Mock user ID
-                createdAt: new Date().toISOString()
-            };
+    try {
+      const taskData = {
+        name,
+        mobile,
+        address,
+        plan,
+        initial_password: newPassword,
+        status: 'Pending Installation'
+      };
 
-            onNewCustomerAdded(newCustomer);
+      const newTask = await api.createTask(taskData);
+      onNewCustomerAdded(newTask);
+      showNotification(`User ${name} added successfully! Installation is scheduled.`, 'success');
 
-            showNotification(`User ${name} added successfully! Installation is scheduled.`, 'success');
-            
-            // Reset Form
-            setName('');
-            setMobile('');
-            setAddress('');
-            setPlan('100 Mbps Standard');
-            setNewPassword('');
-            setUserPhoto(null);
-            setKycDoc(null);
-            document.getElementById('userPhoto').value = null;
-            document.getElementById('kycDoc').value = null;
-
-        } catch (error) {
-            console.error("Error adding new user locally: ", error);
-            showNotification(`Error saving data locally: ${error.message}. Please check console.`, 'error');
-        } finally {
-            setLoading(false);
-        }
-    }, 1000); // Simulate network delay
+      // Reset Form
+      setName('');
+      setMobile('');
+      setAddress('');
+      setPlan('100 Mbps Standard');
+      setNewPassword('');
+    } catch (error) {
+      showNotification(error.message || 'Failed to add customer', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const plans = ["100 Mbps Standard", "300 Mbps Fiber Blast", "500 Mbps Pro Gamer", "1 Gbps Premium"];
-
-  const FileUploadArea = ({ icon: Icon, title, file, id, setFile }) => (
-    <div className="bg-white p-4 rounded-xl shadow-inner border border-gray-200">
-      <label htmlFor={id} className="cursor-pointer">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Icon className="w-6 h-6 text-orange-500" />
-            <div>
-              <p className="font-semibold text-gray-800">{title}</p>
-              <p className="text-xs text-gray-500">{file ? file.name : 'Click to upload (Max 2MB)'}</p>
-            </div>
-          </div>
-          <button type="button" className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${file ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-            {file ? 'Uploaded' : 'Select File'}
-          </button>
-        </div>
-      </label>
-      <input 
-        type="file" 
-        id={id} 
-        hidden 
-        accept="image/*, .pdf"
-        onChange={(e) => handleFileChange(e, setFile)}
-      />
-    </div>
-  );
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -356,31 +355,10 @@ const EngineerDashboard = ({ showNotification, onNewCustomerAdded }) => {
           </div>
         </div>
 
-        <h3 className="font-semibold text-lg text-gray-700 border-b pt-4 pb-2 mb-4">KYC & Documents</h3>
-        
-        {/* File Uploads */}
-        <div className="space-y-4">
-          <FileUploadArea 
-            icon={Camera} 
-            title="User Photo (Passport Size)" 
-            file={userPhoto} 
-            id="userPhoto" 
-            setFile={setUserPhoto}
-          />
-          <FileUploadArea 
-            icon={FileTextIcon} 
-            title="Aadhaar/KYC Document" 
-            file={kycDoc} 
-            id="kycDoc" 
-            setFile={setKycDoc}
-          />
-          <p className="text-xs text-gray-500 pt-2">Note: Files are mocked; only their names are stored locally.</p>
-        </div>
-
-        <button 
-          type="submit" 
+        <button
+          type="submit"
           disabled={loading}
-          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition-colors shadow-lg shadow-green-200 flex items-center justify-center gap-2"
+          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition-colors shadow-lg shadow-green-200 flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Complete Activation & Save Data"}
         </button>
@@ -391,10 +369,9 @@ const EngineerDashboard = ({ showNotification, onNewCustomerAdded }) => {
 
 
 // 3. Engineer Tasks/List Component
-const EngineerTasks = ({ showNotification, newlyActivatedUsers, onUpdateTaskStatus }) => {
+const EngineerTasks = ({ showNotification, tasks, onTasksUpdate }) => {
   const [loading, setLoading] = useState(false);
 
-  // Status badge utility for tasks
   const TaskStatusBadge = ({ status }) => {
     const styles = {
       'Pending Installation': "bg-yellow-100 text-yellow-800 border-yellow-200",
@@ -408,24 +385,23 @@ const EngineerTasks = ({ showNotification, newlyActivatedUsers, onUpdateTaskStat
     );
   };
 
-  const handleUpdateStatus = (user, newStatus) => {
+  const handleUpdateStatus = async (task, newStatus) => {
     setLoading(true);
+    try {
+      await api.updateTaskStatus(task.id, newStatus);
+      showNotification(`Task for ${task.name} updated to ${newStatus}!`, 'success');
 
-    // Simulate API delay
-    setTimeout(() => {
-        try {
-            onUpdateTaskStatus(user.id, newStatus);
-            showNotification(`Task for ${user.name} updated to ${newStatus}!`, 'success');
-        } catch (error) {
-            console.error("Error updating status locally: ", error);
-            showNotification(`Error updating status: ${error.message}`, 'error');
-        } finally {
-            setLoading(false);
-        }
-    }, 800);
+      // Refresh tasks
+      const updatedTasks = await api.getTasks();
+      onTasksUpdate(updatedTasks);
+    } catch (error) {
+      showNotification(error.message || 'Failed to update status', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const sortedTasks = [...newlyActivatedUsers].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const sortedTasks = [...tasks].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const pendingTasks = sortedTasks.filter(u => u.status !== 'Completed');
   const completedTasks = sortedTasks.filter(u => u.status === 'Completed');
 
@@ -443,36 +419,35 @@ const EngineerTasks = ({ showNotification, newlyActivatedUsers, onUpdateTaskStat
         {pendingTasks.length === 0 ? (
           <p className="p-6 text-center text-gray-500">All set, no pending installations. Time for chai!</p>
         ) : (
-          pendingTasks.map((user) => (
-            <div key={user.id} className="p-4 hover:bg-gray-50 transition-colors">
+          pendingTasks.map((task) => (
+            <div key={task.id} className="p-4 hover:bg-gray-50 transition-colors">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-gray-800 truncate">{user.name} ({user.mobile})</p>
+                  <p className="font-bold text-gray-800 truncate">{task.name} ({task.mobile})</p>
                   <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
                     <MapPin className="w-3 h-3 flex-shrink-0" />
-                    <span className="truncate">{user.address}</span>
+                    <span className="truncate">{task.address}</span>
                   </p>
                   <div className="mt-2">
-                    <TaskStatusBadge status={user.status} />
+                    <TaskStatusBadge status={task.status} />
                   </div>
                 </div>
-                
-                {/* Actions */}
+
                 <div className="flex gap-2 flex-wrap sm:flex-nowrap">
-                  {user.status === 'Pending Installation' && (
-                    <button 
-                      onClick={() => handleUpdateStatus(user, 'Installation Scheduled')}
+                  {task.status === 'Pending Installation' && (
+                    <button
+                      onClick={() => handleUpdateStatus(task, 'Installation Scheduled')}
                       disabled={loading}
-                      className="px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-colors"
+                      className="px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
                     >
                       Schedule
                     </button>
                   )}
-                  {user.status === 'Installation Scheduled' && (
-                    <button 
-                      onClick={() => handleUpdateStatus(user, 'Completed')}
+                  {task.status === 'Installation Scheduled' && (
+                    <button
+                      onClick={() => handleUpdateStatus(task, 'Completed')}
                       disabled={loading}
-                      className="px-3 py-1.5 text-sm bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg transition-colors"
+                      className="px-3 py-1.5 text-sm bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
                     >
                       Mark Completed
                     </button>
@@ -490,13 +465,13 @@ const EngineerTasks = ({ showNotification, newlyActivatedUsers, onUpdateTaskStat
         {completedTasks.length === 0 ? (
           <p className="p-6 text-center text-gray-500">No completed tasks yet.</p>
         ) : (
-          completedTasks.map((user) => (
-            <div key={user.id} className="p-4 opacity-70">
+          completedTasks.map((task) => (
+            <div key={task.id} className="p-4 opacity-70">
               <div className="flex justify-between items-center text-sm">
-                <p className="font-medium text-gray-600 truncate">{user.name}</p>
-                <TaskStatusBadge status={user.status} />
+                <p className="font-medium text-gray-600 truncate">{task.name}</p>
+                <TaskStatusBadge status={task.status} />
               </div>
-              <p className="text-xs text-gray-400 truncate">{user.address}</p>
+              <p className="text-xs text-gray-400 truncate">{task.address}</p>
             </div>
           ))
         )}
@@ -509,16 +484,50 @@ const EngineerTasks = ({ showNotification, newlyActivatedUsers, onUpdateTaskStat
 // 4. Main App Component
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userRole, setUserRole] = useState('customer'); // Default to customer
+  const [userRole, setUserRole] = useState('customer');
+  const [userData, setUserData] = useState(null);
   const [currentView, setCurrentView] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [bills, setBills] = useState(INITIAL_BILLS);
+  const [bills, setBills] = useState([]);
+  const [tasks, setTasks] = useState([]);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedBill, setSelectedBill] = useState(null);
   const [notification, setNotification] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Engineer State (Local Demo Data)
-  const [newlyActivatedUsers, setNewlyActivatedUsers] = useState(INITIAL_ENGINEER_TASKS);
+  // Load user data on mount if token exists
+  useEffect(() => {
+    const checkAuth = async () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          api.setToken(token);
+          const user = await api.getCurrentUser();
+          setUserData(user);
+          setUserRole(user.role);
+          setIsAuthenticated(true);
+        } catch (error) {
+          api.clearToken();
+        }
+      }
+      setLoading(false);
+    };
+    checkAuth();
+  }, []);
+
+  // Load bills when customer logs in
+  useEffect(() => {
+    if (isAuthenticated && userRole === 'customer') {
+      loadBills();
+    }
+  }, [isAuthenticated, userRole]);
+
+  // Load tasks when engineer logs in
+  useEffect(() => {
+    if (isAuthenticated && userRole === 'engineer') {
+      loadTasks();
+    }
+  }, [isAuthenticated, userRole]);
 
   // Set initial view after successful login
   useEffect(() => {
@@ -530,22 +539,31 @@ const App = () => {
       }
     }
   }, [isAuthenticated, userRole]);
-  
-  // Engineer Task Handlers
-  const handleNewCustomerAdded = useCallback((newCustomer) => {
-    setNewlyActivatedUsers(prevUsers => [newCustomer, ...prevUsers]);
+
+  const loadBills = async () => {
+    try {
+      const fetchedBills = await api.getBills();
+      setBills(fetchedBills);
+    } catch (error) {
+      showNotification('Failed to load bills', 'error');
+    }
+  };
+
+  const loadTasks = async () => {
+    try {
+      const fetchedTasks = await api.getTasks();
+      setTasks(fetchedTasks);
+    } catch (error) {
+      showNotification('Failed to load tasks', 'error');
+    }
+  };
+
+  const handleNewCustomerAdded = useCallback((newTask) => {
+    setTasks(prev => [newTask, ...prev]);
   }, []);
 
-  const handleUpdateTaskStatus = useCallback((id, newStatus) => {
-    setNewlyActivatedUsers(prevUsers => 
-      prevUsers.map(user => 
-        user.id === id ? { 
-          ...user, 
-          status: newStatus, 
-          updatedAt: new Date().toISOString() 
-        } : user
-      )
-    );
+  const handleTasksUpdate = useCallback((updatedTasks) => {
+    setTasks(updatedTasks);
   }, []);
 
 
@@ -565,14 +583,15 @@ const App = () => {
     setPaymentModalOpen(true);
   };
 
-  const processPayment = () => {
-    // Optimistic update
-    const updatedBills = bills.map(b => 
-      b.id === selectedBill.id ? { ...b, status: 'Paid' } : b
-    );
-    setBills(updatedBills);
-    setPaymentModalOpen(false);
-    showNotification(`Payment successful! Enjoy the cricket match without buffering.`);
+  const processPayment = async () => {
+    try {
+      await api.payBill(selectedBill.id);
+      await loadBills();
+      setPaymentModalOpen(false);
+      showNotification(`Payment successful! Enjoy the cricket match without buffering.`);
+    } catch (error) {
+      showNotification(error.message || 'Payment failed', 'error');
+    }
   };
 
   // Download Logic (Customer View)
@@ -580,9 +599,31 @@ const App = () => {
     showNotification(`Downloading ${fileName}... saving for tax returns?`, 'info');
   };
 
-  // Conditional early return for Login
+  const handleLogout = () => {
+    api.clearToken();
+    setIsAuthenticated(false);
+    setUserData(null);
+    setBills([]);
+    setTasks([]);
+    setCurrentView('dashboard');
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="w-8 h-8 animate-spin text-orange-600" />
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
-    return <Login onLogin={() => setIsAuthenticated(true)} setUserRole={setUserRole} />;
+    return (
+      <Login
+        onLogin={() => setIsAuthenticated(true)}
+        setUserRole={setUserRole}
+        setUserData={setUserData}
+      />
+    );
   }
   
 
@@ -592,7 +633,7 @@ const App = () => {
       <div className="p-6 border-b border-slate-800 flex justify-between items-center">
         <div className="flex items-center gap-2 font-bold text-xl">
           <Wifi className="text-orange-500" />
-          <span>4You <span className="text-xs font-normal text-orange-300">Demo</span></span>
+          <span>4You <span className="text-xs font-normal text-orange-300">Live</span></span>
         </div>
         <button onClick={() => setMobileMenuOpen(false)} className="md:hidden text-gray-400 hover:text-white">
           <X />
@@ -640,15 +681,13 @@ const App = () => {
       <div className="absolute bottom-0 w-full p-4 border-t border-slate-800">
         <div className="flex items-center gap-3 px-4 py-3">
           <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center font-bold text-sm shrink-0">
-            {userRole === 'engineer' ? <HardHat className="w-4 h-4" /> : 'RS'}
+            {userRole === 'engineer' ? <HardHat className="w-4 h-4" /> : userData?.name?.charAt(0) || 'U'}
           </div>
           <div className="flex-1 overflow-hidden">
-            <p className="text-sm font-medium truncate">{userRole === 'engineer' ? 'Demo Engineer' : MOCK_USER.name}</p>
-            <p className="text-xs text-gray-500 truncate">
-              {userRole === 'engineer' ? 'Mobile: 8888888888' : MOCK_USER.email}
-            </p>
+            <p className="text-sm font-medium truncate">{userData?.name || 'User'}</p>
+            <p className="text-xs text-gray-500 truncate">{userData?.mobile || ''}</p>
           </div>
-          <button onClick={() => setIsAuthenticated(false)} className="text-gray-400 hover:text-red-400">
+          <button onClick={handleLogout} className="text-gray-400 hover:text-red-400">
             <LogOut className="w-5 h-5" />
           </button>
         </div>
@@ -685,7 +724,7 @@ const App = () => {
             <Menu className="w-6 h-6" />
           </button>
           <h1 className="text-xl font-bold text-gray-800 hidden md:block">
-            {userRole === 'engineer' ? 'Engineer Activation Panel' : 'Namaste, Rahul!'}
+            {userRole === 'engineer' ? 'Engineer Activation Panel' : `Namaste, ${userData?.name || 'User'}!`}
           </h1>
           <div className="text-sm text-gray-500 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
@@ -714,16 +753,16 @@ const App = () => {
           {userRole === 'engineer' && (
             <>
               {currentView === 'onboarding' && (
-                <EngineerDashboard 
-                  showNotification={showNotification} 
+                <EngineerDashboard
+                  showNotification={showNotification}
                   onNewCustomerAdded={handleNewCustomerAdded}
                 />
               )}
               {currentView === 'tasks' && (
-                <EngineerTasks 
-                  showNotification={showNotification} 
-                  newlyActivatedUsers={newlyActivatedUsers}
-                  onUpdateTaskStatus={handleUpdateTaskStatus}
+                <EngineerTasks
+                  showNotification={showNotification}
+                  tasks={tasks}
+                  onTasksUpdate={handleTasksUpdate}
                 />
               )}
             </>
@@ -767,10 +806,10 @@ const App = () => {
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                   <p className="text-gray-500 text-sm font-medium">Current Plan</p>
                   <div className="mt-2 flex items-center justify-between">
-                    <h3 className="text-xl font-bold text-gray-800">{MOCK_USER.plan}</h3>
+                    <h3 className="text-xl font-bold text-gray-800">{userData?.plan || 'No Plan'}</h3>
                     <Wifi className="text-orange-500 w-6 h-6" />
                   </div>
-                  <p className="text-xs text-gray-400 mt-2">Cycle resets: 25th Nov</p>
+                  <p className="text-xs text-gray-400 mt-2">Cycle resets: 25th of month</p>
                 </div>
 
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -803,7 +842,7 @@ const App = () => {
                         </div>
                         <div>
                           <p className="font-medium text-gray-800">{bill.month}</p>
-                          <p className="text-xs text-gray-500">Due: {bill.dueDate}</p>
+                          <p className="text-xs text-gray-500">Due: {bill.due_date}</p>
                         </div>
                       </div>
                       
@@ -847,20 +886,20 @@ const App = () => {
                       {bills.map((bill) => (
                         <tr key={bill.id} className="hover:bg-gray-50 transition-colors group">
                           <td className="p-4 font-medium text-gray-800 whitespace-nowrap">{bill.month}</td>
-                          <td className="p-4 text-gray-500 text-sm whitespace-nowrap">{bill.dueDate}</td>
+                          <td className="p-4 text-gray-500 text-sm whitespace-nowrap">{bill.due_date}</td>
                           <td className="p-4 font-semibold text-gray-700 whitespace-nowrap">{formatCurrency(bill.amount)}</td>
                           <td className="p-4 whitespace-nowrap"><StatusBadge status={bill.status} /></td>
                           <td className="p-4 text-right flex justify-end gap-2 whitespace-nowrap">
                             {bill.status === 'Overdue' && (
-                              <button 
+                              <button
                                 onClick={() => handlePayBill(bill)}
                                 className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded shadow-sm"
                               >
                                 Pay Now
                               </button>
                             )}
-                            <button 
-                              onClick={() => handleDownload(bill.pdf)}
+                            <button
+                              onClick={() => handleDownload(bill.pdf_filename)}
                               className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
                               title="Download Invoice"
                             >
