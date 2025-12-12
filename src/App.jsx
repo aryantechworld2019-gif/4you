@@ -532,8 +532,20 @@ const EngineerTasks = ({ showNotification, tasks, onTasksUpdate }) => {
                     <MapPin className="w-3 h-3 flex-shrink-0" />
                     <span className="truncate">{task.address}</span>
                   </p>
-                  <div className="mt-2">
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
                     <TaskStatusBadge status={task.status} />
+                    {task.user_photo_path && (
+                      <span className="px-2 py-0.5 bg-green-50 text-green-700 text-xs font-medium rounded-full border border-green-200 flex items-center gap-1">
+                        <Camera className="w-3 h-3" />
+                        Photo ✓
+                      </span>
+                    )}
+                    {task.kyc_document_path && (
+                      <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-full border border-blue-200 flex items-center gap-1">
+                        <FileTextIcon className="w-3 h-3" />
+                        KYC ✓
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -571,11 +583,27 @@ const EngineerTasks = ({ showNotification, tasks, onTasksUpdate }) => {
         ) : (
           completedTasks.map((task) => (
             <div key={task.id} className="p-4 opacity-70">
-              <div className="flex justify-between items-center text-sm">
-                <p className="font-medium text-gray-600 truncate">{task.name}</p>
-                <TaskStatusBadge status={task.status} />
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between items-center text-sm">
+                  <p className="font-medium text-gray-600 truncate">{task.name}</p>
+                  <TaskStatusBadge status={task.status} />
+                </div>
+                <p className="text-xs text-gray-400 truncate">{task.address}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {task.user_photo_path && (
+                    <span className="px-2 py-0.5 bg-green-50 text-green-600 text-xs font-medium rounded-full border border-green-100 flex items-center gap-1">
+                      <Camera className="w-3 h-3" />
+                      Photo
+                    </span>
+                  )}
+                  {task.kyc_document_path && (
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-full border border-blue-100 flex items-center gap-1">
+                      <FileTextIcon className="w-3 h-3" />
+                      KYC
+                    </span>
+                  )}
+                </div>
               </div>
-              <p className="text-xs text-gray-400 truncate">{task.address}</p>
             </div>
           ))
         )}
